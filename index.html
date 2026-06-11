@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Finn</title>
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <style>
         * {
             margin: 0;
@@ -74,7 +77,94 @@
         </svg>
     </button>
     <script>
-        // JS will go here in Task 2
-    </script>
+    const btn = document.getElementById('mic-btn');
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+        btn.disabled = true;
+    } else {
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        let listening = false;
+
+        btn.addEventListener('click', () => {
+            if (listening) return;
+            listening = true;
+            btn.classList.add('listening');
+            recognition.start();
+        });
+
+        recognition.addEventListener('result', (event) => {
+            const transcript = event.results[0][0].transcript;
+            listening = false;
+            btn.classList.remove('listening');
+            translateAndSpeak(transcript);
+        });
+
+        recognition.addEventListener('error', () => {
+            listening = false;
+            btn.classList.remove('listening');
+            btn.classList.add('error');
+            setTimeout(() => btn.classList.remove('error'), 600);
+        });
+
+        recognition.addEventListener('end', () => {
+            if (listening) {
+                listening = false;
+                btn.classList.remove('listening');
+            }
+        });
+    }
+
+    async function translateAndSpeak(text) {
+        try {
+            const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|fi`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('API error');
+            const data = await response.json();
+            const translated = data.responseData.translatedText;
+            speak(translated);
+        } catch (e) {
+            btn.classList.add('error');
+            setTimeout(() => btn.classList.remove('error'), 600);
+        }
+    }
+
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+        speechSynthesis.onvoiceschanged = () => {};
+    }
+
+    function speak(text) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'fi-FI';
+
+        const setVoice = () => {
+            const voices = speechSynthesis.getVoices();
+            const finnishVoice = voices.find(v => v.lang.startsWith('fi'));
+            if (finnishVoice) {
+                utterance.voice = finnishVoice;
+            }
+        };
+
+        setVoice();
+        if (speechSynthesis.getVoices().length === 0) {
+            speechSynthesis.addEventListener('voiceschanged', setVoice, { once: true });
+        }
+
+        btn.classList.add('success');
+        utterance.addEventListener('end', () => {
+            btn.classList.remove('success');
+        });
+        utterance.addEventListener('error', () => {
+            btn.classList.remove('success');
+        });
+
+        speechSynthesis.speak(utterance);
+    }
+</script>
 </body>
 </html>
