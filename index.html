@@ -19,17 +19,17 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            gap: 40px;
             background: #1a1a2e;
             overflow: hidden;
             -webkit-tap-highlight-color: transparent;
         }
 
-        #mic-btn {
-            width: 140px;
-            height: 140px;
+        .btn {
+            width: 120px;
+            height: 120px;
             border-radius: 50%;
             border: none;
-            background: #0f3460;
             cursor: pointer;
             display: flex;
             align-items: center;
@@ -37,23 +37,46 @@
             transition: background 0.3s ease;
         }
 
-        #mic-btn:disabled {
+        .btn:disabled {
             background: #333;
             opacity: 0.5;
             cursor: not-allowed;
         }
 
-        #mic-btn.listening {
+        .btn svg {
+            width: 50px;
+            height: 50px;
+            fill: #ffffff;
+        }
+
+        #rec-btn {
+            background: #0f3460;
+        }
+
+        #rec-btn.listening {
             animation: pulse 1s infinite;
             background: #c0392b;
         }
 
-        #mic-btn.success {
+        #rec-btn.success {
             background: #27ae60;
         }
 
-        #mic-btn.error {
+        #rec-btn.error {
             background: #e67e22;
+        }
+
+        #play-btn {
+            background: #0f3460;
+        }
+
+        #play-btn.playing {
+            background: #27ae60;
+        }
+
+        #play-btn:disabled {
+            background: #333;
+            opacity: 0.3;
         }
 
         @keyframes pulse {
@@ -61,61 +84,70 @@
             50% { transform: scale(1.08); }
             100% { transform: scale(1); }
         }
-
-        #mic-btn svg {
-            width: 60px;
-            height: 60px;
-            fill: #ffffff;
-        }
     </style>
 </head>
 <body>
-    <button id="mic-btn" aria-label="Tap to speak">
+    <button id="rec-btn" class="btn" aria-label="Tap to record, tap again to stop">
         <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
             <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
         </svg>
     </button>
+    <button id="play-btn" class="btn" disabled aria-label="Play Finnish translation">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 5v14l11-7z"/>
+        </svg>
+    </button>
     <script>
-    const btn = document.getElementById('mic-btn');
+    const recBtn = document.getElementById('rec-btn');
+    const playBtn = document.getElementById('play-btn');
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
+    let lastTranslation = '';
+
     if (!SpeechRecognition) {
-        btn.disabled = true;
+        recBtn.disabled = true;
     } else {
         const recognition = new SpeechRecognition();
         recognition.lang = 'en-US';
         recognition.interimResults = false;
         recognition.maxAlternatives = 1;
+        recognition.continuous = true;
 
         let listening = false;
 
-        btn.addEventListener('click', () => {
-            if (listening) return;
-            listening = true;
-            btn.classList.add('listening');
-            recognition.start();
+        recBtn.addEventListener('click', () => {
+            if (listening) {
+                listening = false;
+                recBtn.classList.remove('listening');
+                recognition.stop();
+            } else {
+                listening = true;
+                recBtn.classList.add('listening');
+                recognition.start();
+            }
         });
 
         recognition.addEventListener('result', (event) => {
-            const transcript = event.results[0][0].transcript;
-            listening = false;
-            btn.classList.remove('listening');
+            let transcript = '';
+            for (let i = 0; i < event.results.length; i++) {
+                transcript += event.results[i][0].transcript;
+            }
             translateAndSpeak(transcript);
         });
 
         recognition.addEventListener('error', () => {
             listening = false;
-            btn.classList.remove('listening');
-            btn.classList.add('error');
-            setTimeout(() => btn.classList.remove('error'), 600);
+            recBtn.classList.remove('listening');
+            recBtn.classList.add('error');
+            setTimeout(() => recBtn.classList.remove('error'), 600);
         });
 
         recognition.addEventListener('end', () => {
             if (listening) {
+                recBtn.classList.remove('listening');
                 listening = false;
-                btn.classList.remove('listening');
             }
         });
     }
@@ -127,10 +159,12 @@
             if (!response.ok) throw new Error('API error');
             const data = await response.json();
             const translated = data.responseData.translatedText;
+            lastTranslation = translated;
+            playBtn.disabled = false;
             speak(translated);
         } catch (e) {
-            btn.classList.add('error');
-            setTimeout(() => btn.classList.remove('error'), 600);
+            recBtn.classList.add('error');
+            setTimeout(() => recBtn.classList.remove('error'), 600);
         }
     }
 
@@ -138,29 +172,31 @@
         speechSynthesis.onvoiceschanged = () => {};
     }
 
+    playBtn.addEventListener('click', () => {
+        if (lastTranslation) {
+            speak(lastTranslation);
+        }
+    });
+
     function speak(text) {
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'fi-FI';
 
-        const setVoice = () => {
-            const voices = speechSynthesis.getVoices();
-            const finnishVoice = voices.find(v => v.lang.startsWith('fi'));
-            if (finnishVoice) {
-                utterance.voice = finnishVoice;
-            }
-        };
-
-        setVoice();
-        if (speechSynthesis.getVoices().length === 0) {
-            speechSynthesis.addEventListener('voiceschanged', setVoice, { once: true });
+        const voices = speechSynthesis.getVoices();
+        const finnishVoice = voices.find(v => v.lang.startsWith('fi'));
+        if (finnishVoice) {
+            utterance.voice = finnishVoice;
         }
 
-        btn.classList.add('success');
+        recBtn.classList.add('success');
+        playBtn.classList.add('playing');
         utterance.addEventListener('end', () => {
-            btn.classList.remove('success');
+            recBtn.classList.remove('success');
+            playBtn.classList.remove('playing');
         });
         utterance.addEventListener('error', () => {
-            btn.classList.remove('success');
+            recBtn.classList.remove('success');
+            playBtn.classList.remove('playing');
         });
 
         speechSynthesis.speak(utterance);
